@@ -26,7 +26,18 @@
     <p class="hint">ഈ പേജ് പബ്ലിക് സൈറ്റിൽ വയ്ക്കരുത്; ഫോണിൽ/കംപ്യൂട്ടറിൽ ലോക്കലായി തുറക്കുക.</p>
   </div>
 
-  <label for="adminMal">മലയാളം വാക്ക്:</label>
+  <div class="correction-box">
+    <label for="pasteBox" style="margin-top:0">📥 വാട്സാപ്പ് തിരുത്തൽ പേസ്റ്റ് ചെയ്യുക:</label>
+    <textarea id="pasteBox" style="height:90px" placeholder="തിരുത്തൽ&#10;വാക്ക്: ഭക്ഷണം&#10;രൂപം: ..."></textarea>
+    <div class="btn-group"><button class="btn btn-main" id="pasteBtn">✔️ എടുക്കുക</button></div>
+    <p class="hint">ഒന്നിലധികം സന്ദേശങ്ങൾ ഒന്നിച്ച് പേസ്റ്റ് ചെയ്യാം.</p>
+  </div>
+
+  <div style="display:flex;gap:18px;margin-top:15px;font-size:14px">
+    <label style="margin:0;font-weight:normal"><input type="radio" name="kind" value="വാക്ക്" checked> വാക്ക്</label>
+    <label style="margin:0;font-weight:normal"><input type="radio" name="kind" value="അക്ഷരം"> അക്ഷരം</label>
+  </div>
+  <label for="adminMal">മലയാളം വാക്ക് / അക്ഷരം:</label>
   <input type="text" id="adminMal" placeholder="ഉദാ: ഭക്ഷണം">
   <label for="adminArb">അറബി മലയാളം രൂപം:</label>
   <input type="text" id="adminArb" class="arabic-output" placeholder="بَهْكْشَڹَمْ">
@@ -38,6 +49,8 @@
 
   <label>നിലവിലുള്ള വാക്കുകൾ:</label>
   <div id="wordList" class="saved-list"></div>
+  <label>നിലവിലുള്ള അക്ഷരങ്ങൾ:</label>
+  <div id="letterList" class="saved-list"></div>
 
   <div class="creator-footer">Created by: <b>Salmanul Faris Zaini Mannarkkad</b><br>Phone/WhatsApp: <b>9895993822</b></div>
 </div>
@@ -45,7 +58,7 @@
 
 <script>
 "use strict";
-const KEY = "my_arbi_dict";
+const KEY = "my_arbi_dict", LKEY = "my_arbi_letters";
 const $ = id => document.getElementById(id);
 const ls = {
   get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
@@ -55,13 +68,15 @@ function toast(m) {
   const t = $("toast"); t.textContent = m; t.classList.add("show");
   clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove("show"), 2600);
 }
-function getDict() {
+function getDict(k = KEY) {
   try {
-    const p = JSON.parse(ls.get(KEY) || "{}");
+    const p = JSON.parse(ls.get(k) || "{}");
     return p && typeof p === "object" && !Array.isArray(p) ? p : {};
   } catch (e) { return {}; }
 }
-function setDict(d) { ls.set(KEY, JSON.stringify(d)); }
+function setDict(d, k = KEY) { ls.set(k, JSON.stringify(d)); }
+const keyOf = isLetter => isLetter ? LKEY : KEY;
+const isLetterSel = () => document.querySelector('input[name="kind"]:checked').value === "അക്ഷരം";
 
 function loadConfig() {
   $("ghToken").value = ls.get("gh_token") || "";
@@ -76,12 +91,16 @@ function saveConfig() {
 }
 
 function renderList() {
-  const list = $("wordList"), dict = getDict(), keys = Object.keys(dict);
+  renderInto($("wordList"), KEY, "വാക്കുകൾ ഒന്നുമില്ല");
+  renderInto($("letterList"), LKEY, "അക്ഷരങ്ങൾ ഒന്നുമില്ല");
+}
+function renderInto(list, storeKey, emptyMsg) {
+  const dict = getDict(storeKey), keys = Object.keys(dict);
   list.textContent = "";
   if (!keys.length) {
     const e = document.createElement("div");
     e.style.cssText = "text-align:center;color:#888";
-    e.textContent = "വാക്കുകൾ ഒന്നുമില്ല";
+    e.textContent = emptyMsg;
     list.appendChild(e); return;
   }
   keys.forEach(k => {
@@ -95,7 +114,7 @@ function renderList() {
     const del = document.createElement("button");
     del.className = "small-btn"; del.textContent = "❌ നീക്കം";
     del.addEventListener("click", () => {
-      const d = getDict(); delete d[k]; setDict(d); renderList();
+      const d = getDict(storeKey); delete d[k]; setDict(d, storeKey); renderList();
     });
     row.append(txt, del); list.appendChild(row);
   });
@@ -105,10 +124,36 @@ function addWord() {
   const mal = $("adminMal").value.normalize("NFC").trim();
   const arb = $("adminArb").value.trim();
   if (!mal || !arb) { toast("രണ്ടും പൂരിപ്പിക്കുക!"); return; }
-  const d = getDict(); d[mal] = arb; setDict(d);
+  const sk = keyOf(isLetterSel()), d = getDict(sk); d[mal] = arb; setDict(d, sk);
   $("adminMal").value = ""; $("adminArb").value = "";
   renderList(); toast("ലിസ്റ്റിൽ ചേർത്തു (ഇനി പബ്ലിഷ് ചെയ്യുക)");
 }
+
+function parsePaste() {
+  const text = $("pasteBox").value.normalize("NFC");
+  const re = /(?:തരം:[ \t]*(.+?)[ \t]*\r?\n[ \t]*)?വാക്ക്:[ \t]*(.+?)[ \t]*\r?\n[ \t]*രൂപം:[ \t]*(.+)/g;
+  const found = [];
+  let m;
+  while ((m = re.exec(text))) {
+    const mal = m[2].trim(), arb = m[3].trim();
+    if (mal && arb) found.push([mal, arb, (m[1] || "").trim() === "അക്ഷരം"]);
+  }
+  if (!found.length) { toast("തിരുത്തൽ കണ്ടെത്തിയില്ല"); return; }
+  if (found.length === 1) {
+    $("adminMal").value = found[0][0];
+    $("adminArb").value = found[0][1];
+    document.querySelector(`input[name="kind"][value="${found[0][2] ? "അക്ഷരം" : "വാക്ക്"}"]`).checked = true;
+    toast("ഫീൽഡുകളിൽ നിറച്ചു; പരിശോധിച്ച് ചേർക്കുക");
+  } else {
+    if (!confirm(`${found.length} തിരുത്തലുകൾ ലിസ്റ്റിൽ ചേർക്കട്ടെ?`)) return;
+    const w = getDict(KEY), l = getDict(LKEY);
+    found.forEach(([k, v, isL]) => { (isL ? l : w)[k] = v; });
+    setDict(w, KEY); setDict(l, LKEY); renderList();
+    toast(`${found.length} തിരുത്തലുകൾ ചേർത്തു (ഇനി പബ്ലിഷ് ചെയ്യുക)`);
+  }
+  $("pasteBox").value = "";
+}
+$("pasteBtn").addEventListener("click", parsePaste);
 
 /* ---- GitHub ---- */
 const b64enc = s => btoa(unescape(encodeURIComponent(s)));
@@ -125,20 +170,22 @@ function gh() {
 
 async function fetchRemote(g) {
   const res = await fetch(g.url, { headers: g.headers, cache: "no-store" });
-  if (res.status === 404) return { sha: undefined, data: {} };
+  if (res.status === 404) return { sha: undefined, words: {}, letters: {} };
   if (!res.ok) throw new Error((await res.json()).message || res.status);
   const f = await res.json();
-  let data = {};
-  try { data = JSON.parse(b64dec(f.content)); } catch (e) {}
-  return { sha: f.sha, data: data && typeof data === "object" ? data : {} };
+  let d = {};
+  try { d = JSON.parse(b64dec(f.content)); } catch (e) {}
+  d = d && typeof d === "object" && !Array.isArray(d) ? d : {};
+  const isNew = d.words || d.letters;
+  return { sha: f.sha, words: isNew ? (d.words || {}) : d, letters: isNew ? (d.letters || {}) : {} };
 }
 
 async function loadFromGitHub() {
   const g = gh(); if (!g) return;
   try {
     const r = await fetchRemote(g);
-    setDict(r.data); renderList();
-    toast(`ഗിറ്റ്ഹബ്ബിൽ നിന്ന് ${Object.keys(r.data).length} വാക്കുകൾ ലോഡ് ചെയ്തു`);
+    setDict(r.words, KEY); setDict(r.letters, LKEY); renderList();
+    toast(`ലോഡ് ചെയ്തു: ${Object.keys(r.words).length} വാക്കുകൾ, ${Object.keys(r.letters).length} അക്ഷരങ്ങൾ`);
   } catch (e) { toast("ലോഡ് പരാജയപ്പെട്ടു: " + e.message); }
 }
 
@@ -146,10 +193,11 @@ async function syncToGitHub() {
   const g = gh(); if (!g) return;
   const btn = $("syncBtn"); btn.disabled = true;
   try {
-    const local = getDict();
+    const local = { words: getDict(KEY), letters: getDict(LKEY) };
     const r = await fetchRemote(g);
-    const missing = Object.keys(r.data).filter(k => !(k in local));
-    if (missing.length && !confirm(`ഗിറ്റ്ഹബ്ബിലെ ${missing.length} വാക്കുകൾ ഇവിടെ ഇല്ല; പബ്ലിഷ് ചെയ്താൽ അവ മായും. തുടരട്ടെ?\n(ഒഴിവാക്കാൻ ആദ്യം "ഗിറ്റ്ഹബ്ബിൽ നിന്ന് ലോഡ്" അമർത്തുക)`)) return;
+    const missing = Object.keys(r.words).filter(k => !(k in local.words))
+      .concat(Object.keys(r.letters).filter(k => !(k in local.letters)));
+    if (missing.length && !confirm(`ഗിറ്റ്ഹബ്ബിലെ ${missing.length} എണ്ണം ഇവിടെ ഇല്ല; പബ്ലിഷ് ചെയ്താൽ അവ മായും. തുടരട്ടെ?\n(ഒഴിവാക്കാൻ ആദ്യം "ഗിറ്റ്ഹബ്ബിൽ നിന്ന് ലോഡ്" അമർത്തുക)`)) return;
     const put = await fetch(g.url, {
       method: "PUT",
       headers: { ...g.headers, "Content-Type": "application/json" },

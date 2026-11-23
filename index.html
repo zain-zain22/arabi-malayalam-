@@ -24,7 +24,11 @@
 
   <div class="correction-box">
     <label style="margin-top:0">ഏതെങ്കിലും വാക്ക് തെറ്റാണെങ്കിൽ ഇവിടെ തിരുത്തി നൽകുക:</label>
-    <label for="suggestMal" style="font-size:12px;font-weight:normal">മലയാളം വാക്ക്:</label>
+    <div style="display:flex;gap:18px;margin-top:10px;font-size:14px">
+      <label style="margin:0;font-weight:normal"><input type="radio" name="kind" value="വാക്ക്" checked> വാക്ക്</label>
+      <label style="margin:0;font-weight:normal"><input type="radio" name="kind" value="അക്ഷരം"> അക്ഷരം</label>
+    </div>
+    <label for="suggestMal" style="font-size:12px;font-weight:normal">മലയാളം വാക്ക് / അക്ഷരം:</label>
     <input type="text" id="suggestMal" placeholder="ഉദാ: ഭക്ഷണം">
     <label for="suggestArb" style="font-size:12px;font-weight:normal">ശരിയായ അറബി മലയാളം രൂപം:</label>
     <input type="text" id="suggestArb" class="arabic-output" style="font-size:18px" placeholder="ശരിയായ രൂപം എഴുതുക">
@@ -50,18 +54,32 @@ function safeLoad(key) {
   } catch (e) { return {}; }
 }
 
-/* വാക്ക് നിഘണ്ടു: സൈറ്റിലെ data.json (ഓഫ്‌ലൈനിൽ അവസാനം സേവ് ചെയ്ത കോപ്പി) */
-let words = safeLoad(CACHE_KEY);
+/* ഡാറ്റ: സൈറ്റിലെ data.json -> {"words":{...},"letters":{...}} (പഴയ ഫോർമാറ്റും ശരി). ഓഫ്‌ലൈനിൽ കാഷെ. */
+let words = {}, letters = {}, IV, BC, VS, SC;
+function applyData(d) {
+  d = d && typeof d === "object" && !Array.isArray(d) ? d : {};
+  const isNew = d.words || d.letters;
+  words = isNew ? (d.words || {}) : d;
+  letters = isNew ? (d.letters || {}) : {};
+  rebuild();
+}
+function rebuild() {
+  IV = { ...initialVowels }; VS = { ...vowelSigns }; BC = { ...baseConsonants };
+  const all = { ...safeLoad(LETTER_KEY), ...letters };
+  for (const k in all) {
+    if (k in initialVowels) IV[k] = all[k];
+    else if (k in vowelSigns) VS[k] = all[k];
+    else BC[k] = all[k];
+  }
+  SC = Object.keys(BC).sort((a, b) => Array.from(b).length - Array.from(a).length);
+}
 async function loadWords() {
   try {
     const res = await fetch("data.json?t=" + Date.now(), { cache: "no-store" });
     if (!res.ok) return;
     const d = await res.json();
-    if (d && typeof d === "object" && !Array.isArray(d)) {
-      words = d;
-      try { localStorage.setItem(CACHE_KEY, JSON.stringify(d)); } catch (e) {}
-      render();
-    }
+    try { localStorage.setItem(CACHE_KEY, JSON.stringify(d)); } catch (e) {}
+    applyData(d); render();
   } catch (e) { /* ഓഫ്‌ലൈൻ: കാഷെ ഉപയോഗിക്കും */ }
 }
 
@@ -85,35 +103,27 @@ const baseConsonants = {
 };
 const vowelSigns = { "ാ":"َا", "ി":"ِ", "ീ":"ِي", "ു":"ُ", "ൂ":"ُو", "െ":"٘", "േ":"٘ي", "ൈ":"َیْ", "ൊ":"ٗ", "ോ":"ٗو", "ൗ":"َوْ", "ൃ":"ِرُ", "്":"ۡ", "ഃ":"َهْ" };
 const chilluSet = new Set(["ൻ", "ൽ", "ർ", "ൾ", "ൺ", "ൿ"]);
-const sortedConsonants = Object.keys(baseConsonants).sort((a, b) => Array.from(b).length - Array.from(a).length);
 const BOUNDARY = /[\s.,\/#!$%\^&\*;:{}=\-_`~()?"'،؟൹]/u;
 
 function convertLogic(text) {
   text = String(text || "").normalize("NFC");
-  const customLetters = safeLoad(LETTER_KEY);
-  const customKeys = Object.keys(customLetters).sort((a, b) => Array.from(b).length - Array.from(a).length);
   let result = "", i = 0;
   const isBoundary = idx => idx >= text.length || BOUNDARY.test(text[idx]);
 
   while (i < text.length) {
-    let matched = false;
-    for (const key of customKeys) {
-      if (text.startsWith(key, i)) { result += customLetters[key]; i += key.length; matched = true; break; }
-    }
-    if (matched) continue;
     const char = text[i];
-    if (initialVowels[char]) { result += initialVowels[char]; i++; continue; }
+    if (IV[char]) { result += IV[char]; i++; continue; }
     if (char === "ം") { result += isBoundary(i + 1) ? "مْ" : "مٛ"; i++; continue; }
     let found = false;
-    for (const con of sortedConsonants) {
+    for (const con of SC) {
       if (!text.startsWith(con, i)) continue;
-      const arbiCon = baseConsonants[con];
+      const arbiCon = BC[con];
       const ni = i + con.length, nc = text[ni] || "";
       if (nc === "ം") {
         result += arbiCon + "َ" + (isBoundary(ni + 1) ? "مْ" : "مٛ");
         i = ni + 1;
-      } else if (vowelSigns[nc]) {
-        const sign = vowelSigns[nc];
+      } else if (VS[nc]) {
+        const sign = VS[nc];
         if (text[ni + 1] === "ം") {
           result += arbiCon + sign + (isBoundary(ni + 2) ? "مْ" : "مٛ");
           i = ni + 2;
@@ -159,13 +169,15 @@ function sendToWhatsApp() {
   const mal = $("suggestMal").value.normalize("NFC").trim();
   const arb = $("suggestArb").value.trim();
   if (!mal || !arb) { toast("വിവരങ്ങൾ നൽകുക!"); return; }
-  window.open(`https://wa.me/919895993822?text=${encodeURIComponent(`തിരുത്തൽ:\nമലയാളം: ${mal}\nഅറബി മലയാളം: ${arb}`)}`, "_blank");
+  const kind = document.querySelector('input[name="kind"]:checked').value;
+  window.open(`https://wa.me/919895993822?text=${encodeURIComponent(`തിരുത്തൽ\nതരം: ${kind}\nവാക്ക്: ${mal}\nരൂപം: ${arb}`)}`, "_blank");
 }
 
 $("malayalamInput").addEventListener("input", render);
 $("copyBtn").addEventListener("click", copyText);
 $("clearBtn").addEventListener("click", () => { $("malayalamInput").value = ""; $("arabicOutput").value = ""; });
 $("waBtn").addEventListener("click", sendToWhatsApp);
+applyData(safeLoad(CACHE_KEY));
 loadWords();
 </script>
 </body>

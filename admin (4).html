@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="ml">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>അറബി മലയാളം അഡ്മിൻ പാനൽ</title>
+<meta name="robots" content="noindex">
+<link rel="stylesheet" href="style.css">
+</head>
+<body class="admin">
+<div class="container">
+  <h2>⚙️ അഡ്മിൻ പാനൽ</h2>
+  <p class="subtitle">ഗിറ്റ്ഹബ് കോൺഫിഗറേഷനും വാക്ക് മാനേജുമെന്റും</p>
+
+  <div class="config-box">
+    <label for="ghToken" style="margin-top:0">GitHub Token (ഈ റിപ്പോയ്ക്ക് മാത്രമുള്ള fine-grained):</label>
+    <input type="password" id="ghToken" placeholder="github_pat_xxxx" autocomplete="off">
+    <label for="ghOwner">GitHub Username:</label>
+    <input type="text" id="ghOwner" placeholder="ഉദാ: salmanulfaris">
+    <label for="ghRepo">Repository:</label>
+    <input type="text" id="ghRepo" placeholder="ഉദാ: arbi-malayalam">
+    <div class="btn-group">
+      <button class="btn btn-gray" id="saveCfg">💾 സേവ്</button>
+      <button class="btn btn-gray" id="loadGh">⬇️ ഗിറ്റ്ഹബ്ബിൽ നിന്ന് ലോഡ്</button>
+    </div>
+    <p class="hint">ഈ പേജ് പബ്ലിക് സൈറ്റിൽ വയ്ക്കരുത്; ഫോണിൽ/കംപ്യൂട്ടറിൽ ലോക്കലായി തുറക്കുക.</p>
+  </div>
+
+  <label for="adminMal">മലയാളം വാക്ക്:</label>
+  <input type="text" id="adminMal" placeholder="ഉദാ: ഭക്ഷണം">
+  <label for="adminArb">അറബി മലയാളം രൂപം:</label>
+  <input type="text" id="adminArb" class="arabic-output" placeholder="بَهْكْشَڹَمْ">
+
+  <div class="btn-group">
+    <button class="btn btn-main" id="addBtn">➕ ലിസ്റ്റിലേക്ക് ചേർക്കുക</button>
+    <button class="btn btn-github" id="syncBtn">☁️ ഗിറ്റ്ഹബ്ബിലേക്ക് പബ്ലിഷ്</button>
+  </div>
+
+  <label>നിലവിലുള്ള വാക്കുകൾ:</label>
+  <div id="wordList" class="saved-list"></div>
+
+  <div class="creator-footer">Created by: <b>Salmanul Faris Zaini Mannarkkad</b><br>Phone/WhatsApp: <b>9895993822</b></div>
+</div>
+<div id="toast"></div>
+
+<script>
+"use strict";
+const KEY = "my_arbi_dict";
+const $ = id => document.getElementById(id);
+const ls = {
+  get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+};
+function toast(m) {
+  const t = $("toast"); t.textContent = m; t.classList.add("show");
+  clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove("show"), 2600);
+}
+function getDict() {
+  try {
+    const p = JSON.parse(ls.get(KEY) || "{}");
+    return p && typeof p === "object" && !Array.isArray(p) ? p : {};
+  } catch (e) { return {}; }
+}
+function setDict(d) { ls.set(KEY, JSON.stringify(d)); }
+
+function loadConfig() {
+  $("ghToken").value = ls.get("gh_token") || "";
+  $("ghOwner").value = ls.get("gh_owner") || "";
+  $("ghRepo").value = ls.get("gh_repo") || "";
+}
+function saveConfig() {
+  ls.set("gh_token", $("ghToken").value.trim());
+  ls.set("gh_owner", $("ghOwner").value.trim());
+  ls.set("gh_repo", $("ghRepo").value.trim());
+  toast("കോൺഫിഗറേഷൻ സേവ് ചെയ്തു");
+}
+
+function renderList() {
+  const list = $("wordList"), dict = getDict(), keys = Object.keys(dict);
+  list.textContent = "";
+  if (!keys.length) {
+    const e = document.createElement("div");
+    e.style.cssText = "text-align:center;color:#888";
+    e.textContent = "വാക്കുകൾ ഒന്നുമില്ല";
+    list.appendChild(e); return;
+  }
+  keys.forEach(k => {
+    const row = document.createElement("div"); row.className = "saved-item";
+    const txt = document.createElement("span");
+    const b = document.createElement("b"); b.textContent = k;
+    const ar = document.createElement("span");
+    ar.dir = "rtl"; ar.style.cssText = "font-family:Amiri,serif;color:#117864";
+    ar.textContent = dict[k];
+    txt.append(b, " : ", ar);
+    const del = document.createElement("button");
+    del.className = "small-btn"; del.textContent = "❌ നീക്കം";
+    del.addEventListener("click", () => {
+      const d = getDict(); delete d[k]; setDict(d); renderList();
+    });
+    row.append(txt, del); list.appendChild(row);
+  });
+}
+
+function addWord() {
+  const mal = $("adminMal").value.normalize("NFC").trim();
+  const arb = $("adminArb").value.trim();
+  if (!mal || !arb) { toast("രണ്ടും പൂരിപ്പിക്കുക!"); return; }
+  const d = getDict(); d[mal] = arb; setDict(d);
+  $("adminMal").value = ""; $("adminArb").value = "";
+  renderList(); toast("ലിസ്റ്റിൽ ചേർത്തു (ഇനി പബ്ലിഷ് ചെയ്യുക)");
+}
+
+/* ---- GitHub ---- */
+const b64enc = s => btoa(unescape(encodeURIComponent(s)));
+const b64dec = s => decodeURIComponent(escape(atob(s.replace(/\s/g, ""))));
+
+function gh() {
+  const token = ls.get("gh_token"), owner = ls.get("gh_owner"), repo = ls.get("gh_repo");
+  if (!token || !owner || !repo) { toast("ആദ്യം ഗിറ്റ്ഹബ് വിവരങ്ങൾ സേവ് ചെയ്യുക"); return null; }
+  return {
+    url: `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/contents/data.json`,
+    headers: { "Authorization": `Bearer ${token}`, "Accept": "application/vnd.github+json" }
+  };
+}
+
+async function fetchRemote(g) {
+  const res = await fetch(g.url, { headers: g.headers, cache: "no-store" });
+  if (res.status === 404) return { sha: undefined, data: {} };
+  if (!res.ok) throw new Error((await res.json()).message || res.status);
+  const f = await res.json();
+  let data = {};
+  try { data = JSON.parse(b64dec(f.content)); } catch (e) {}
+  return { sha: f.sha, data: data && typeof data === "object" ? data : {} };
+}
+
+async function loadFromGitHub() {
+  const g = gh(); if (!g) return;
+  try {
+    const r = await fetchRemote(g);
+    setDict(r.data); renderList();
+    toast(`ഗിറ്റ്ഹബ്ബിൽ നിന്ന് ${Object.keys(r.data).length} വാക്കുകൾ ലോഡ് ചെയ്തു`);
+  } catch (e) { toast("ലോഡ് പരാജയപ്പെട്ടു: " + e.message); }
+}
+
+async function syncToGitHub() {
+  const g = gh(); if (!g) return;
+  const btn = $("syncBtn"); btn.disabled = true;
+  try {
+    const local = getDict();
+    const r = await fetchRemote(g);
+    const missing = Object.keys(r.data).filter(k => !(k in local));
+    if (missing.length && !confirm(`ഗിറ്റ്ഹബ്ബിലെ ${missing.length} വാക്കുകൾ ഇവിടെ ഇല്ല; പബ്ലിഷ് ചെയ്താൽ അവ മായും. തുടരട്ടെ?\n(ഒഴിവാക്കാൻ ആദ്യം "ഗിറ്റ്ഹബ്ബിൽ നിന്ന് ലോഡ്" അമർത്തുക)`)) return;
+    const put = await fetch(g.url, {
+      method: "PUT",
+      headers: { ...g.headers, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        message: "Update dictionary via Admin Panel",
+        content: b64enc(JSON.stringify(local, null, 2)),
+        sha: r.sha
+      })
+    });
+    if (put.ok) toast("✅ ഗിറ്റ്ഹബ്ബിലേക്ക് പബ്ലിഷ് ചെയ്തു!");
+    else toast("പരാജയപ്പെട്ടു: " + ((await put.json()).message || put.status));
+  } catch (e) { toast("എറർ: " + e.message); }
+  finally { btn.disabled = false; }
+}
+
+$("saveCfg").addEventListener("click", saveConfig);
+$("loadGh").addEventListener("click", loadFromGitHub);
+$("addBtn").addEventListener("click", addWord);
+$("syncBtn").addEventListener("click", syncToGitHub);
+loadConfig(); renderList();
+</script>
+</body>
+</html>

@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="ml">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>അറബി മലയാളം കൺവെർട്ടർ</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="container">
+  <h2>🔄 അറബി മലയാളം കൺവെർട്ടർ</h2>
+  <p class="subtitle">ടൈപ്പ് ചെയ്യുമ്പോൾ തത്സമയം അറബി മലയാളത്തിലേക്ക് മാറും</p>
+
+  <label for="malayalamInput">മലയാളത്തിൽ ടൈപ്പ് ചെയ്യുക:</label>
+  <textarea id="malayalamInput" placeholder="മുഖം, ഭക്ഷണം, ഹലോ..."></textarea>
+
+  <label for="arabicOutput">അറബി മലയാളം രൂപം:</label>
+  <textarea id="arabicOutput" class="arabic-output" readonly placeholder="അറബി മലയാളം ഇവിടെ കാണാം..."></textarea>
+
+  <div class="btn-group">
+    <button class="btn btn-main" id="copyBtn">📋 കോപ്പി ചെയ്യുക</button>
+    <button class="btn btn-red" id="clearBtn">🗑️ മായ്ക്കുക</button>
+  </div>
+
+  <div class="correction-box">
+    <label style="margin-top:0">ഏതെങ്കിലും വാക്ക് തെറ്റാണെങ്കിൽ ഇവിടെ തിരുത്തി നൽകുക:</label>
+    <label for="suggestMal" style="font-size:12px;font-weight:normal">മലയാളം വാക്ക്:</label>
+    <input type="text" id="suggestMal" placeholder="ഉദാ: ഭക്ഷണം">
+    <label for="suggestArb" style="font-size:12px;font-weight:normal">ശരിയായ അറബി മലയാളം രൂപം:</label>
+    <input type="text" id="suggestArb" class="arabic-output" style="font-size:18px" placeholder="ശരിയായ രൂപം എഴുതുക">
+    <div class="btn-group"><button class="btn btn-whatsapp" id="waBtn">💬 വാട്സാപ്പിലേക്ക് അയക്കുക</button></div>
+  </div>
+
+  <div class="creator-footer">Created by: <b>Salmanul Faris Zaini Mannarkkad</b><br>Phone/WhatsApp: <b>9895993822</b></div>
+</div>
+<div id="toast"></div>
+
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+const CACHE_KEY = "arbi_remote_cache", LETTER_KEY = "my_arbi_letters";
+function toast(m) {
+  const t = $("toast"); t.textContent = m; t.classList.add("show");
+  clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove("show"), 2200);
+}
+function safeLoad(key) {
+  try {
+    const p = JSON.parse(localStorage.getItem(key) || "{}");
+    return p && typeof p === "object" && !Array.isArray(p) ? p : {};
+  } catch (e) { return {}; }
+}
+
+/* വാക്ക് നിഘണ്ടു: സൈറ്റിലെ data.json (ഓഫ്‌ലൈനിൽ അവസാനം സേവ് ചെയ്ത കോപ്പി) */
+let words = safeLoad(CACHE_KEY);
+async function loadWords() {
+  try {
+    const res = await fetch("data.json?t=" + Date.now(), { cache: "no-store" });
+    if (!res.ok) return;
+    const d = await res.json();
+    if (d && typeof d === "object" && !Array.isArray(d)) {
+      words = d;
+      try { localStorage.setItem(CACHE_KEY, JSON.stringify(d)); } catch (e) {}
+      render();
+    }
+  } catch (e) { /* ഓഫ്‌ലൈൻ: കാഷെ ഉപയോഗിക്കും */ }
+}
+
+const initialVowels = { "അ":"اَ", "ആ":"آ", "ഇ":"اِ", "ഈ":"اِی", "ഉ":"اُ", "ഊ":"اُو", "ഋ":"ِرُ", "എ":"ا٘", "ഏ":"ا٘ي", "ഐ":"اَیْ", "ഒ":"اٗ", "ഓ":"اٗو", "ഔ":"اَوْ" };
+const baseConsonants = {
+  "ൻ":"نْ", "ൽ":"لْ", "ർ":"رٛ", "ൾ":"ۻۡ", "ൺ":"ڹۡ", "ൿ":"كۡ",
+  "ക്ക":"كّ", "ഗ്ഗ":"گّ", "ങ്ങ":"ۼّ", "ച്ച":"چّ", "ജ്ജ":"جّ", "ഞ്ഞ":"ڿّ",
+  "ട്ട":"ڊّ", "ണ്ണ":"ڹّ", "ത്ത":"تّ", "ദ്ധ":"دّ", "ന്ന":"نّ", "പ്പ":"پّ",
+  "ബ്ബ":"بّ", "മ്മ":"مّ", "യ്യ":"يّ", "ല്ല":"لّ", "വ്വ":"وّ", "ശ്ശ":"ۺّ",
+  "സ്സ":"سّ", "ള്ള":"ۻّ", "റ്റ":"رّ",
+  "ന്ത":"نْت", "ണ്ട":"ڹْڊ", "ങ്ക":"ۼْك", "ഞ്ച":"ڿْچ", "മ്പ":"مْپ", "ന്റ":"نْر",
+  "സ്ഥ":"سْت", "ന്ദ":"نْد", "ക്ഷ":"كْش", "ക്ത":"كْت", "സ്ക":"سْك",
+  "ക്ര":"كْر", "പ്ര":"پْر", "ത്ര":"تْر", "പ്ല":"پْل", "സ്വ":"سْو", "ത്വ":"تْو",
+  "ക":"ك", "ഖ":"كھ", "ഗ":"گ", "ഘ":"گھ", "ങ":"ۼ",
+  "ച":"چ", "ഛ":"چھ", "ജ":"ج", "ഝ":"جھ", "ഞ":"ڿ",
+  "ട":"ڊ", "ഠ":"ڊھ", "ഡ":"ڗ", "ഢ":"ڗھ", "ണ":"ڹ",
+  "ത":"ت", "ഥ":"تھ", "ദ":"د", "ധ":"دھ", "ന":"ن",
+  "പ":"پ", "ഫ":"ف", "ബ":"ب", "ഭ":"بھ", "മ":"م",
+  "യ":"ي", "ര":"ڔ", "ല":"ل", "വ":"و", "ശ":"ۺ",
+  "ഷ":"ش", "സ":"س", "ഹ":"ه", "ള":"ۻ", "ഴ":"ژ", "റ":"ر"
+};
+const vowelSigns = { "ാ":"َا", "ി":"ِ", "ീ":"ِي", "ു":"ُ", "ൂ":"ُو", "െ":"٘", "േ":"٘ي", "ൈ":"َیْ", "ൊ":"ٗ", "ോ":"ٗو", "ൗ":"َوْ", "ൃ":"ِرُ", "്":"ۡ", "ഃ":"َهْ" };
+const chilluSet = new Set(["ൻ", "ൽ", "ർ", "ൾ", "ൺ", "ൿ"]);
+const sortedConsonants = Object.keys(baseConsonants).sort((a, b) => Array.from(b).length - Array.from(a).length);
+const BOUNDARY = /[\s.,\/#!$%\^&\*;:{}=\-_`~()?"'،؟൹]/u;
+
+function convertLogic(text) {
+  text = String(text || "").normalize("NFC");
+  const customLetters = safeLoad(LETTER_KEY);
+  const customKeys = Object.keys(customLetters).sort((a, b) => Array.from(b).length - Array.from(a).length);
+  let result = "", i = 0;
+  const isBoundary = idx => idx >= text.length || BOUNDARY.test(text[idx]);
+
+  while (i < text.length) {
+    let matched = false;
+    for (const key of customKeys) {
+      if (text.startsWith(key, i)) { result += customLetters[key]; i += key.length; matched = true; break; }
+    }
+    if (matched) continue;
+    const char = text[i];
+    if (initialVowels[char]) { result += initialVowels[char]; i++; continue; }
+    if (char === "ം") { result += isBoundary(i + 1) ? "مْ" : "مٛ"; i++; continue; }
+    let found = false;
+    for (const con of sortedConsonants) {
+      if (!text.startsWith(con, i)) continue;
+      const arbiCon = baseConsonants[con];
+      const ni = i + con.length, nc = text[ni] || "";
+      if (nc === "ം") {
+        result += arbiCon + "َ" + (isBoundary(ni + 1) ? "مْ" : "مٛ");
+        i = ni + 1;
+      } else if (vowelSigns[nc]) {
+        const sign = vowelSigns[nc];
+        if (text[ni + 1] === "ം") {
+          result += arbiCon + sign + (isBoundary(ni + 2) ? "مْ" : "مٛ");
+          i = ni + 2;
+        } else { result += arbiCon + sign; i = ni + 1; }
+      } else {
+        result += chilluSet.has(con) ? arbiCon : arbiCon + "َ";
+        i = ni;
+      }
+      found = true; break;
+    }
+    if (!found) { result += char; i++; }
+  }
+  return result;
+}
+
+function convertWithDict(input) {
+  if (!input) return "";
+  input = String(input).normalize("NFC");
+  if (Object.prototype.hasOwnProperty.call(words, input)) return words[input];
+  return input.split(/(\s+)/).map(tok => {
+    if (!tok.trim()) return tok;
+    return Object.prototype.hasOwnProperty.call(words, tok) ? words[tok] : convertLogic(tok);
+  }).join("");
+}
+
+function render() { $("arabicOutput").value = convertWithDict($("malayalamInput").value); }
+
+async function copyText() {
+  const out = $("arabicOutput");
+  if (!out.value) { toast("ഒന്നുമില്ല!"); return; }
+  try {
+    await navigator.clipboard.writeText(out.value);
+  } catch (e) {
+    out.removeAttribute("readonly"); out.select(); out.setSelectionRange(0, 99999);
+    const ok = document.execCommand("copy");
+    out.setAttribute("readonly", ""); out.blur();
+    if (!ok) { toast("കോപ്പി പരാജയപ്പെട്ടു"); return; }
+  }
+  toast("കോപ്പി ചെയ്തു!");
+}
+
+function sendToWhatsApp() {
+  const mal = $("suggestMal").value.normalize("NFC").trim();
+  const arb = $("suggestArb").value.trim();
+  if (!mal || !arb) { toast("വിവരങ്ങൾ നൽകുക!"); return; }
+  window.open(`https://wa.me/919895993822?text=${encodeURIComponent(`തിരുത്തൽ:\nമലയാളം: ${mal}\nഅറബി മലയാളം: ${arb}`)}`, "_blank");
+}
+
+$("malayalamInput").addEventListener("input", render);
+$("copyBtn").addEventListener("click", copyText);
+$("clearBtn").addEventListener("click", () => { $("malayalamInput").value = ""; $("arabicOutput").value = ""; });
+$("waBtn").addEventListener("click", sendToWhatsApp);
+loadWords();
+</script>
+</body>
+</html>
